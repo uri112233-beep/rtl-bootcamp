@@ -20,40 +20,45 @@ module fsm_example #(
   state_e state_q, state_d;
   cnt_t   cnt_q,  cnt_d;
 
-  // Combinational next-state / outputs
-  always_comb begin
-    state_d = state_q;
-    cnt_d   = cnt_q;
-    busy_o  = 1'b0;
-    done_o  = 1'b0;
+ // Always_comb for "clear at end" policy (with top defaults)
+// (English-only comments)
+always_comb begin
+  // ---- global defaults (prevent latches; create HOLD leg) ----
+  state_d = state_q;   // HOLD by default
+  cnt_d   = cnt_q;     // HOLD by default
+  busy_o  = 1'b0;
+  done_o  = 1'b0;
 
-    unique case (state_q)
-      S_IDLE: if (start_i) begin
-        state_d = S_BUSY;
-        cnt_d   = '0;
-      end
+  unique case (state_q)
+    S_IDLE: begin
+      cnt_d = '0;                    // keep cleared while idle
+      if (start_i) state_d = S_BUSY; // start counting from 0
+    end
 
-      S_BUSY: begin
-        busy_o = 1'b1;
-        if (cnt_q == CNT_MAX) begin
-          state_d = S_DONE;
-        end else begin
-          // Sized +1 using the same vector type as the counter
-          cnt_d = cnt_q + cnt_t'(1);
-        end
+    S_BUSY: begin
+      busy_o = 1'b1;
+      if (cnt_q == CNT_MAX) begin
+        state_d = S_DONE;
+        cnt_d   = '0;                // clear at terminal (end)
+      end else begin
+        cnt_d   = cnt_q + cnt_t'(1); // increment while counting
       end
+    end
 
-      S_DONE: begin
-        done_o  = 1'b1;   // one-cycle pulse
-        state_d = S_IDLE;
-      end
+    S_DONE: begin
+      done_o  = 1'b1;                // one-cycle pulse
+      state_d = S_IDLE;
+      cnt_d   = '0;                  // stay cleared during DONE
+    end
 
-      default: begin
-        state_d = S_IDLE;
-        cnt_d   = '0;
-      end
-    endcase
-  end
+    default: begin
+      // illegal-state recovery (not related to top defaults)
+      state_d = S_IDLE;
+      cnt_d   = '0;
+    end
+  endcase
+end
+
 
   // Sequential state/counter with async reset, sync release
   always_ff @(posedge clk_i or negedge rst_ni) begin
